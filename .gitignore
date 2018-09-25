@@ -1,0 +1,16 @@
+
+\.vscode/
+
+bin/Debug/netcoreapp2\.1/
+
+bin/Release/netcoreapp2\.1/ubuntu\.16\.10-x64/
+
+bin/Release/netcoreapp2\.1/win10-x64/
+
+obj/Debug/netcoreapp2\.1/
+
+obj/netcoreapp2\.1/ubuntu\.16\.10-x64/host/
+
+obj/netcoreapp2\.1/win10-x64/host/
+
+obj/
