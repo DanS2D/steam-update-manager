@@ -14,3 +14,7 @@ obj/netcoreapp2\.1/ubuntu\.16\.10-x64/host/
 obj/netcoreapp2\.1/win10-x64/host/
 
 obj/
+
+bin/Release/netcoreapp2\.1/ubuntu-x64/
+
+bin/Release/netcoreapp2\.1/win-x64/

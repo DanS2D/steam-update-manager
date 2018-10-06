@@ -34,3 +34,8 @@ Using the default Steam installation path.
 #### Building for release
 
 To build for release, execute the following command: `dotnet publish --self-contained -c Release -r win10-x64`. You should substitute `win10-x64` for `ubuntu.16.10-x64` if building for Ubuntu.
+
+#### Planned Features
+
+- Ability to exclude specified games from being affected by any of the above commands.
+- Ability to clear pending updates for all pending game updates, or only pending updates that are partially downloaded, or only ones that have partially downloaded.

@@ -17,15 +17,23 @@ namespace SteamAutoUpdates
 			CommandLineArgs.Parse(args);
 			
 			bool dryRun = CommandLineArgs.DryRun;
-			int disableUpdates = CommandLineArgs.DisableUpdates ? 1 : 0;
+			bool clearQueuedUpdates = CommandLineArgs.ClearQueuedUpdates;
+			CommandLineArgs.QueuedUpdateClearMode clearQueuedUpdateMode = CommandLineArgs.ClearQueuedUpdateMode;
+			int disableUpdatesValue = CommandLineArgs.DisableUpdates ? 1 : 0;
 			string steamPath = (CommandLineArgs.SteamPath.Length > 0) ? CommandLineArgs.SteamPath : @"C:\Program Files (x86)\Steam\steamapps";
 			string operatingMode = dryRun ? "Dry (no changes will be written to file)" : "Live (changes will be written to file)";
 			const string gameInfoExtension = ".acf";
 			const string gameNameKey = "name";
 			const string gameAutoUpdateKey = "AutoUpdateBehavior";
+			const string gameStateFlagsKey = "StateFlags";
+			const string gameUpdateResultKey = "UpdateResult";
+			const string gameBytesToDownloadKey = "BytesToDownload";
+			const string gameBytesDownloadedKey = "BytesDownloaded";
 			const string keepUpToDateTitle = "Always keep this game up to date";
 			const string onlyUpdateWhenLaunchedTitle = "Only update this game when I launch it";
 			int changesMade = 0;
+			const int gameStateUpdated = 4;
+			const int gameUpdateDone = 0;
 
 			/* steam manifest values 
 				* 0 == always keep game up to date
@@ -48,27 +56,31 @@ namespace SteamAutoUpdates
 				if (fileExtension.EndsWith(gameInfoExtension))
 				{
 					string[] lines = File.ReadAllLines(filePath);
-					string gameName = string.Empty;
 					bool changedThisFile = false;
+					string gameName = Array.Find(lines, n => n.Contains(gameNameKey));
+					string gameAutoupdate = Array.Find(lines, n => n.Contains(gameAutoUpdateKey));
+					string gameUpdateResult = Array.Find(lines, n => n.Contains(gameUpdateResultKey));
+					string gameBytesToDownload = Array.Find(lines, n => n.Contains(gameBytesToDownloadKey));
+					string gameBytesDownloaded = Array.Find(lines, n => n.Contains(gameBytesDownloadedKey));
+					string gameStateFlags = Array.Find(lines, n => n.Contains(gameStateFlagsKey));
 
-					foreach (string line in lines)
+					if (gameName.Length > 0)
 					{
-						if (line.Contains(gameNameKey))
-						{
-							gameName = line.Substring(6, line.Length - 6);
-							gameName = gameName.Remove(0, 4).Remove(gameName.Length - 5, 1);
-						}
-						else if (line.Contains(gameAutoUpdateKey))
-						{
-							int i = Array.IndexOf(lines, line);
-							int oldUpdateValue = Convert.ToInt16(lines[i].Substring(lines[i].Length - 2, 1));
-							lines[i] = $@"	""{gameAutoUpdateKey}""		""{disableUpdates}""";
-							int newUpdateValue = Convert.ToInt16(lines[i].Substring(lines[i].Length - 2, 1));
-							string oldUpdateTitle = (oldUpdateValue == 0) ? keepUpToDateTitle : onlyUpdateWhenLaunchedTitle;
-							string newUpdateTitle = (newUpdateValue == 0) ? keepUpToDateTitle : onlyUpdateWhenLaunchedTitle;
+						gameName = gameName.Substring(6, gameName.Length - 6);
+						gameName = gameName.Remove(0, 4).Remove(gameName.Length - 5, 1);
 
-							if (oldUpdateValue != newUpdateValue)
+						Console.ForegroundColor = ConsoleColor.DarkRed;
+						Console.WriteLine(gameName);
+						Console.ResetColor();
+
+						if (gameAutoUpdateKey.Length > 0)
+						{
+							long autoUpdateValue = GetNumericValue(gameAutoupdate);
+
+							if (autoUpdateValue != disableUpdatesValue)
 							{
+								string oldUpdateTitle = (autoUpdateValue == 0) ? keepUpToDateTitle : onlyUpdateWhenLaunchedTitle;
+								string newUpdateTitle = (disableUpdatesValue == 0) ? keepUpToDateTitle : onlyUpdateWhenLaunchedTitle;
 								Console.ForegroundColor = ConsoleColor.DarkMagenta;
 								Console.Write(gameName);
 								Console.ResetColor();
@@ -81,16 +93,95 @@ namespace SteamAutoUpdates
 								Console.ForegroundColor = ConsoleColor.Blue;
 								Console.Write($"'{newUpdateTitle}'.\n");
 								Console.ResetColor();
-								changesMade++;
+								
+								lines[Array.IndexOf(lines, gameAutoupdate)] = $@"	""{gameAutoUpdateKey}""		""{disableUpdatesValue}""";
 								changedThisFile = true;
 							}
 						}
-					}
 
-					// write the changes to file
-					if (!dryRun && changedThisFile)
-					{
-						File.WriteAllLines(filePath, lines);
+						if (gameUpdateResult.Length > 0)
+						{
+							long updateResult = GetNumericValue(gameUpdateResult);
+
+							if (clearQueuedUpdates)
+							{
+								if (updateResult != gameUpdateDone)
+								{
+									int index = Array.IndexOf(lines, gameUpdateResult);
+								
+									// "UpdateResult"	"0" == updated
+									switch (clearQueuedUpdateMode)
+									{
+										case CommandLineArgs.QueuedUpdateClearMode.All:
+											lines[index] = $@"	""{gameUpdateResultKey}""		""{gameUpdateDone}""";
+											break;
+
+										case CommandLineArgs.QueuedUpdateClearMode.Partial:
+											lines[index] = $@"	""{gameUpdateResultKey}""		""{gameUpdateDone}""";
+											break;
+
+										case CommandLineArgs.QueuedUpdateClearMode.ExcludePartial:
+											lines[index] = $@"	""{gameUpdateResultKey}""		""{gameUpdateDone}""";
+											break;
+									}
+
+									Console.WriteLine($"Update value changed from '{updateResult}' to '{gameUpdateDone}' (updated)");
+
+									changedThisFile = true;
+								}
+
+								if (gameBytesToDownload.Length > 0 && gameBytesDownloaded.Length > 0)
+								{
+									long bytesToDownload = GetNumericValue(gameBytesToDownload);
+									long bytesDownloaded = GetNumericValue(gameBytesDownloaded);
+
+									Console.Write("bytes to download: ");
+									Console.ForegroundColor = ConsoleColor.DarkBlue;
+									Console.Write(bytesToDownload);
+									Console.ResetColor();
+									Console.Write("/");
+									Console.ForegroundColor = ConsoleColor.DarkRed;
+									Console.Write($"{bytesDownloaded}\n");
+									Console.ResetColor();
+								}
+
+								if (gameStateFlags.Length > 0)
+								{
+									long currentState = GetNumericValue(gameStateFlags);
+									int index = Array.IndexOf(lines, gameStateFlags);
+
+									if (currentState == gameStateUpdated) continue;
+
+									// "StateFlags"	"4" == no update required
+									switch (clearQueuedUpdateMode)
+									{
+										case CommandLineArgs.QueuedUpdateClearMode.All:
+											lines[index] = $@"	""{gameStateFlagsKey}""		""{gameStateUpdated}""";
+											break;
+
+										case CommandLineArgs.QueuedUpdateClearMode.Partial:
+											lines[index] = $@"	""{gameStateFlagsKey}""		""{gameStateUpdated}""";
+											break;
+
+										case CommandLineArgs.QueuedUpdateClearMode.ExcludePartial:
+											lines[index] = $@"	""{gameStateFlagsKey}""		""{gameStateUpdated}""";
+											break;
+									}
+
+									Console.WriteLine($"StateFlags value changed from '{currentState}' to '{gameStateUpdated}' (updated)");
+
+									changedThisFile = true;
+								}
+							}
+						}
+
+						if (changedThisFile) changesMade++;
+
+						// write the changes to this file
+						if (!dryRun && changedThisFile)
+						{
+							File.WriteAllLines(filePath, lines);
+						}
 					}
 				}
 			}
@@ -101,11 +192,11 @@ namespace SteamAutoUpdates
 
 			if (changesMade > 0)
 			{
-				string info = $"Wrote changes to {changesMade} files!";
+				string info = $"Wrote changes to {changesMade} file(s)!";
 
 				if (dryRun)
 				{
-					info = $"Running this action in live mode would result in changes to {changesMade} files.";
+					info = $"Running this action in live mode would result in changes to {changesMade} file(s).";
 				}
 
 				Console.WriteLine(info);
@@ -123,6 +214,15 @@ namespace SteamAutoUpdates
 			}
 
 			StartSteam();
+		}
+
+		static long GetNumericValue(string input)
+		{
+			int startIdx = input.IndexOfAny("0123456789".ToCharArray());
+			int endIdx = input.Length - startIdx - 1;
+			string value = input.Substring(startIdx, endIdx);
+
+			return Convert.ToInt64(value);
 		}
 
 		static void StartSteam()

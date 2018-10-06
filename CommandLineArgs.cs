@@ -14,13 +14,23 @@ namespace Utils
 		private static List<string> _args;
 		public static bool DryRun { get; set; }
 		public static bool DisableUpdates { get; set; }
+		public static bool ClearQueuedUpdates { get; set; }
 		public static string SteamPath { get; set; }
+		public static string ClearQueuedUpdatesSetting { get; set; }
+		public static QueuedUpdateClearMode ClearQueuedUpdateMode;
+		private static string[] ValidQueuedUpdateSettings = {"all", "partial", "exclude-partial"};
 
 		private static class Arguments
 		{
 			public const string DryRun = "--dry";
 			public const string SteamPath = "--path";
 			public const string DisableUpdates = "--disable";
+			public const string ClearQueuedUpdates = "--clearQueued";
+		}
+
+		public enum QueuedUpdateClearMode
+		{
+			All, Partial, ExcludePartial
 		}
 
 		public static void Parse(string[] cmdArgs)
@@ -28,7 +38,23 @@ namespace Utils
 			_args = cmdArgs.ToList();
 			DryRun = ArgExists(Arguments.DryRun);
 			DisableUpdates = ArgExists(Arguments.DisableUpdates);
+			ClearQueuedUpdates = ArgExists(Arguments.ClearQueuedUpdates);
 			SteamPath = ArgExists(Arguments.SteamPath) ? ParseArgValue(Arguments.SteamPath, ParseArg(Arguments.SteamPath)) : string.Empty;
+			ClearQueuedUpdatesSetting = ArgExists(Arguments.ClearQueuedUpdates) ? ParseArgValue(Arguments.ClearQueuedUpdates, ParseArg(Arguments.ClearQueuedUpdates)) : string.Empty;
+
+			// validate the clearedQueuedUpdate setting
+			if (!ValidQueuedUpdateSettings.Any(ClearQueuedUpdatesSetting.Equals))
+			{
+				ClearQueuedUpdateMode = (QueuedUpdateClearMode)Array.IndexOf(ValidQueuedUpdateSettings, ClearQueuedUpdatesSetting);
+				string validOptions = string.Join(", ", ValidQueuedUpdateSettings);
+				Console.ForegroundColor = ConsoleColor.Red;
+				Console.Write("Warning: ");
+				Console.ResetColor();
+				Console.Write("Invalid --clearQueued argument value. Valid values are: ");
+				Console.ForegroundColor = ConsoleColor.Magenta;
+				Console.Write($"{validOptions}\n");
+				Console.ResetColor();
+			}
 		}
 
 		private static bool ArgExists(string name) => (ParseArg(name) >= 0);
